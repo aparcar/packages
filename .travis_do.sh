@@ -64,8 +64,14 @@ download_sdk() {
 # test_package will run on the `script` step.
 # test_package call make download check for very new/modified package
 test_packages2() {
-	# search for new or modified packages. PKGS will hold a list of package like 'admin/muninlite admin/monit ...'
-	PKGS=$(git diff --diff-filter=d --name-only "$TRAVIS_COMMIT_RANGE" | grep 'Makefile$' | grep -v '/files/' | awk -F'/Makefile' '{ print $1 }')
+	# search for new or modified packages. PKGS will hold a list of package like 'luci-app-adblock ...'
+	CHANGES=$(git diff --diff-filter=d --name-only "$TRAVIS_COMMIT_RANGE" | awk -F/ '{ print $1"/"$2 }' | uniq)
+	PKGS=""
+	for change in $CHANGES ; do
+		if [ -f "${change}/Makefile" ] ; then
+			PKGS="$(echo $change | awk -F/ '{ print $2 }') $PKGS"
+		fi
+	done
 
 	if [ -z "$PKGS" ] ; then
 		echo_blue "No new or modified packages found!"
@@ -82,12 +88,43 @@ test_packages2() {
 	cd "$tmp_path"
 	tar Jxf "$SDK_HOME/$SDK.tar.xz" --strip=1
 
+	# just for testing
+	##################
+	TRAVIS_REPO_SLUG="openwrt/$(echo $TRAVIS_REPO_SLUG | awk -F/ '{ print $2 }')"
+	##################
+
 	# use github mirrors to spare lede servers
-	cat > feeds.conf <<EOF
-src-git base https://github.com/lede-project/source.git
-src-link packages $PACKAGES_DIR
-src-git luci https://github.com/openwrt/luci.git
-EOF
+	REPO_BASE="base https://github.com/lede-project/source.git"
+	REPO_PACKAGES="packages https://github.com/openwrt/packages.git"
+	REPO_LUCI="luci https://github.com/openwrt/luci.git"
+	REPO_TELEPHONY="telephony https://github.com/openwrt/telephony.git"
+	REPO_ROUTING="routing https://github.com/openwrt-routing/packages.git"
+
+	# we definitely want base
+	if [[ $REPO_BASE == *"$TRAVIS_REPO_SLUG"* ]]; then
+		echo "src-link base $PACKAGES_DIR" > feeds.conf
+	else
+		echo "src-git $REPO_BASE" > feeds.conf
+	fi
+
+	# we definitely want packages?
+	if [[ $REPO_PACKAGES == *"$TRAVIS_REPO_SLUG"* ]]; then
+		echo "src-link packages $PACKAGES_DIR" >> feeds.conf
+	else
+		echo "src-git $REPO_PACKAGES" >> feeds.conf
+		if [[ $REPO_LUCI == *"$TRAVIS_REPO_SLUG"* ]]; then
+			echo "src-link $(echo $REPO_LUCI | awk -F' ' '{ print $1 }') $PACKAGES_DIR" >> feeds.conf
+
+		elif [[ $REPO_TELEPHONY == *"$TRAVIS_REPO_SLUG"* ]]; then
+			echo "src-link $(echo $REPO_TELEPHONY | awk -F' ' '{ print $1 }') $PACKAGES_DIR" >> feeds.conf
+
+		elif [[ $REPO_ROUTING == *"$TRAVIS_REPO_SLUG"* ]]; then
+			echo "src-link $(echo $REPO_ROUTING | awk -F' ' '{ print $1 }') $PACKAGES_DIR" >> feeds.conf
+		fi
+	fi
+
+	echo_blue "=== Enabled repositories"
+	cat feeds.conf
 
 	# enable BUILD_LOG
 	sed -i '1s/^/config BUILD_LOG\n\tbool\n\tdefault y\n\n/' Config-build.in
@@ -98,10 +135,7 @@ EOF
 	echo_blue "=== Setting up SDK done"
 
 	RET=0
-	# E.g: pkg_dir => admin/muninlite
-	# pkg_name => muninlite
-	for pkg_dir in $PKGS ; do
-		pkg_name=$(echo "$pkg_dir" | awk -F/ '{ print $NF }')
+	for pkg_name in $PKGS ; do
 		echo_blue "=== $pkg_name: Starting quick tests"
 
 		exec_status 'WARNING|ERROR' make "package/$pkg_name/download" V=s || RET=1
@@ -112,8 +146,7 @@ EOF
 
 	[ $RET -ne 0 ] && return $RET
 
-	for pkg_dir in $PKGS ; do
-		pkg_name=$(echo "$pkg_dir" | awk -F/ '{ print $NF }')
+	for pkg_name in $PKGS ; do
 		echo_blue "=== $pkg_name: Starting compile test"
 
 		# we can't enable verbose built else we often hit Travis limits
@@ -123,7 +156,7 @@ EOF
 		echo_blue "=== $pkg_name: compile test done"
 
 		echo_blue "=== $pkg_name: begin compile logs"
-		for f in $(find logs/package/feeds/packages/$pkg_name/ -type f); do
+		for f in $(find logs/package/feeds/luci/$pkg_name/ -type f); do
 			echo_blue "Printing $f"
 			cat "$f"
 		done
@@ -183,10 +216,11 @@ echo_blue "=== Travis ENV"
 env
 echo_blue "=== Travis ENV"
 
+FIRST_COMMIT_ID="$(git log --reverse --pretty=format:"%H" | head -n 1)"
 while true; do
 	# if clone depth is too small, git rev-list / diff return incorrect or empty results
 	C="$(git rev-list ${TRAVIS_COMMIT_RANGE/.../..} | tail -n1)" 2>/dev/null
-	[ -n "$C" -a "$C" != "a22de9b74cf9579d1ce7e6cf1845b4afa4277b00" ] && break
+	[ -n "$C" -a "$C" != "$FIRST_COMMIT_ID" ] && break
 	echo_blue "Fetching 50 commits more"
 	git fetch origin --deepen=50
 done
