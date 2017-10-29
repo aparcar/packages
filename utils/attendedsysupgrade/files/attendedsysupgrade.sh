@@ -1,5 +1,7 @@
 # sends a request to the demo update server
 UPDATESERVER="http://betaupdate.libremesh.org"
+echo "untrusted comment: worker 33" > /tmp/worker_pubkey
+echo "RWRFTbSNRlxUI3TtRQkWEwxs384u9jv2zdPvP5ItA1XxA+JhCjIUkDbp" >> /tmp/worker_pubkey
 
 . /usr/share/libubox/jshn.sh
 
@@ -66,6 +68,7 @@ function upgrade_check_200() {
 		echo "new release found: $version"
 		echo "request firmware and download?"
 		read request_sysupgrade
+		#request_sysupgrade="y"
 		if [ "$request_sysupgrade" == "y" ]; then
 			echo "requesting image"
 			export IMAGEBUILDER=0
@@ -111,7 +114,28 @@ function image_request() {
 	elif [ $statuscode -eq 200 ]; then
 		json_load "$content"
 		json_get_var sysupgrade_url sysupgrade
+		json_get_var sysupgrade_checksum checksum
 		uclient-fetch -O "/tmp/sysupgrade.bin" "${sysupgrade_url/https/http}"
+		md5_checksum="$(md5sum /tmp/sysupgrade.bin | awk '{ print $1 }')"
+		echo $md5_checksum
+		echo $sysupgrade_checksum
+		if [ "$md5_checksum" != "$sysupgrade_checksum" ]; then
+			echo "checksum: missmatch!"
+			exit 1
+		else
+			echo "checksum: valid"
+		fi
+		uclient-fetch -O "/tmp/sysupgrade.bin.sig" "${sysupgrade_url/https/http}.sig"
+		usign -V -m /tmp/sysupgrade.bin -p /tmp/worker_pubkey -q
+		if [ $? != 0 ]; then
+			echo "signature: missmatch!"
+			exit 1
+		else
+			echo "signature: valid"
+			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			echo "not really secure just yet due to http"
+			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+		fi
 		echo "install sysupgrade? [y/N]"
 		read install_sysupgrade
 		if [ "$install_sysupgrade" == "y" ]; then
