@@ -1,15 +1,7 @@
 # sends a request to the demo update server
-UPDATESERVER="https://ledeupdate.planetexpress.cc"
-UPDATESERVER="http://192.168.1.3:5000"
 UPDATESERVER="http://betaupdate.libremesh.org"
 
-JSON_FILE=$1
-
-IMAGEBUILDER=0
-BUILDING=0
-
 . /usr/share/libubox/jshn.sh
-
 
 function gen_json () {
 	json_init
@@ -30,18 +22,24 @@ function gen_json () {
 	export REQUEST_JSON="$(json_dump)"
 }
 
+IMAGEBUILDER=0
+BUILDING=0
 function server_request () {
-	response=$(curl -s -w "\n%{http_code}" -X POST "$UPDATESERVER"/$REQUEST_PATH -d "$REQUEST_JSON" --header "Content-Type: application/json")
-	export statuscode=$(echo "$response" | tail -n 1)
-	export content=$(echo "$response" | head -n 1)
+	export content="$(uclient-fetch --post-data "$REQUEST_JSON" "$UPDATESERVER/$REQUEST_PATH" -O- 2>/tmp/uclient-statuscode)"
+	export statuscode=$(expr "$(cat /tmp/uclient-statuscode)" : '.*HTTP error \([0-9][0-9][0-9]\)')
+	if [ -z $statuscode ]; then
+		export statuscode=200
+	fi
 }
 
 gen_json
-export REQUEST_PATH='update-request'
+export REQUEST_PATH='api/upgrade-check'
 
 function upgrade_check () {
 	server_request
-	if [ $statuscode -eq 500 ]; then
+	if [ $statuscode -eq 200 ]; then
+		upgrade_check_200
+	elif [ $statuscode -eq 500 ]; then
 		echo "internal server error"
 		echo "$content"
 		exit 1
@@ -58,8 +56,6 @@ function upgrade_check () {
 		fi
 		sleep 1
 		upgrade_check
-	elif [ $statuscode -eq 200 ]; then
-		upgrade_check_200
 	fi
 }
 
@@ -71,6 +67,7 @@ function upgrade_check_200() {
 		echo "request firmware and download?"
 		read request_sysupgrade
 		if [ "$request_sysupgrade" == "y" ]; then
+			echo "requesting image"
 			export IMAGEBUILDER=0
 			export BUILDING=0
 			image_request
@@ -79,7 +76,7 @@ function upgrade_check_200() {
 }
 
 function image_request() {
-	export REQUEST_PATH='image-request'
+	export REQUEST_PATH='api/image-request'
 	server_request
 	if [ $statuscode -eq 500 ]; then
 		echo "internal server error"
@@ -114,7 +111,7 @@ function image_request() {
 	elif [ $statuscode -eq 200 ]; then
 		json_load "$content"
 		json_get_var sysupgrade_url sysupgrade
-		wget -O "/tmp/sysupgrade.bin" "${sysupgrade_url/https/http}"
+		uclient-fetch -O "/tmp/sysupgrade.bin" "${sysupgrade_url/https/http}"
 		echo "install sysupgrade? [y/N]"
 		read install_sysupgrade
 		if [ "$install_sysupgrade" == "y" ]; then

@@ -16,7 +16,7 @@ define Package/attendedsysupgrade
   CATEGORY:=Base system
   TITLE:=Attended Sysupgrade via command line
   MAINTAINER:=Paul Spooren <paul@spooren.de>
-  DEPENDS:=+rpcd-mod-attendedsysupgrade +rpcd-modpackagelist +curl
+  DEPENDS:=+rpcd-mod-attendedsysupgrade +rpcd-modpackagelist
 endef
 
 define Package/attendedsysupgrade/description
