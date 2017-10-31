@@ -52,7 +52,11 @@ function server_request () {
 	export content="$(uclient-fetch --post-data "$REQUEST_JSON" "$UPDATESERVER/$REQUEST_PATH" -O- 2>/tmp/uclient-statuscode)"
 	export statuscode=$(expr "$(cat /tmp/uclient-statuscode)" : '.*HTTP error \([0-9][0-9][0-9]\)')
 	if [ -z $statuscode ]; then
-		export statuscode=200
+		if [ $(expr "$(cat /tmp/uclient-statuscode)" : '.*full content requested') != 0 ]; then
+			export statuscode=206
+		else
+			export statuscode=200
+		fi
 	fi
 }
 
@@ -88,7 +92,7 @@ function upgrade_check_200() {
 	json_get_var version version
 	if [ "$version" != '' ]; then
 		echo "new release found: $version"
-		echo "request firmware and download?"
+		echo "request firmware and download? [y/N]"
 		read request_sysupgrade
 		#request_sysupgrade="y"
 		if [ "$request_sysupgrade" == "y" ]; then
@@ -103,8 +107,6 @@ function upgrade_check_200() {
 function image_request() {
 	export REQUEST_PATH='api/image-request'
 	server_request
-	echo $statuscode
-	cat /tmp/uclient-statuscode
 	if [ $statuscode -eq 500 ]; then
 		echo "internal server error"
 		echo "$content"
