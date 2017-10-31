@@ -5,6 +5,7 @@ echo "RWRFTbSNRlxUI3TtRQkWEwxs384u9jv2zdPvP5ItA1XxA+JhCjIUkDbp" >> /tmp/worker_p
 
 . /usr/share/libubox/jshn.sh
 
+
 function gen_json () {
 	json_init
 	json_load "$(ubus call system board)"
@@ -16,7 +17,28 @@ function gen_json () {
 	target="$(echo $release_target | awk -F'\/' '{ print $1 }')"
 	subtarget="$(echo $release_target | awk -F'\/' '{ print $2 }')"
 
-	json_init
+	json_init;
+	json_add_object "packages"
+
+	if [ -f /usr/lib/opkg/status ]; then
+		while read var p1 p2 p3; do
+			if [ "$var" = "Package:" ]; then
+				pkg="$p1"
+			fi
+			if [ "$var" = "Version:" ]; then
+				version="$p1"
+			fi
+
+			if [ "$var" = "Status:" \
+				-a "$p1" = "install" \
+				-a "$p2" = "user" \
+				-a "$p3" = "installed" ]; then
+					json_add_string "$pkg" "$version";
+			fi
+		done < /usr/lib/opkg/status
+	fi
+
+	json_close_object
 	json_add_string "distro" $distro
 	json_add_string "version" $release
 	json_add_string "target" $target
@@ -81,6 +103,8 @@ function upgrade_check_200() {
 function image_request() {
 	export REQUEST_PATH='api/image-request'
 	server_request
+	echo $statuscode
+	cat /tmp/uclient-statuscode
 	if [ $statuscode -eq 500 ]; then
 		echo "internal server error"
 		echo "$content"
@@ -140,7 +164,17 @@ function image_request() {
 		read install_sysupgrade
 		if [ "$install_sysupgrade" == "y" ]; then
 			echo "installing sysupgrade"
-			ubus call attendedsysupgrade sysupgrade
+			if [ -f "/tmp/sysupgrade.bin" ]; then
+				/etc/init.d/uhttpd stop
+				/etc/init.d/dropbear stop
+				sleep 1;
+				if [ "$keep_settings" -eq "0" ]; then
+					keep_settings_param="-n"
+				fi
+				/sbin/sysupgrade $keep_settings_param /tmp/sysupgrade.bin
+			else
+				echo "could not find /tmp/sysupgrade.bin"
+			fi
 		fi
 	fi
 }
