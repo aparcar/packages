@@ -5,7 +5,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=attendedsysupgrade
-PKG_VERSION:=1
+PKG_VERSION:=0.1
 PKG_RELEASE:=1
 PKG_LICENSE:=GPL-2.0
 
@@ -16,7 +16,7 @@ define Package/attendedsysupgrade
   CATEGORY:=Base system
   TITLE:=Attended Sysupgrade via command line
   MAINTAINER:=Paul Spooren <paul@spooren.de>
-  DEPENDS:=
+  DEPENDS:=+rpcd-mod-attendedsysupgrade
 endef
 
 define Package/attendedsysupgrade/description
