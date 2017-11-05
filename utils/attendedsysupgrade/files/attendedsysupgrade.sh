@@ -1,22 +1,26 @@
 #!/bin/sh
 # sends a request to the demo update server
-UPDATESERVER="http://betaupdate.libremesh.org"
 echo "untrusted comment: worker 33" > /tmp/worker_pubkey
 echo "RWRFTbSNRlxUI3TtRQkWEwxs384u9jv2zdPvP5ItA1XxA+JhCjIUkDbp" >> /tmp/worker_pubkey
 
 CHECK_SIGNATURE=0
 
-
 . /usr/share/libubox/jshn.sh
 
-json_load "$(ubus call system board)"
-json_get_var board_name board_name
-json_select release
-json_get_var release version
-json_get_var distro distribution
-json_get_var release_target target
-target="$(echo $release_target | awk -F'\/' '{ print $1 }')"
-subtarget="$(echo $release_target | awk -F'\/' '{ print $2 }')"
+function load_device_info() {
+	json_load "$(ubus call system board)"
+	json_get_var board_name board_name
+	json_select release
+	json_get_var release version
+	json_get_var distro distribution
+	json_get_var release_target target
+	target="$(echo $release_target | awk -F'\/' '{ print $1 }')"
+	subtarget="$(echo $release_target | awk -F'\/' '{ print $2 }')"
+}
+
+function load_uci() {
+	export UPDATESERVER="$(uci get attendedsysupgrade.server.url)"
+}
 
 function gen_json_board() {
 	json_add_string "distro" $distro
@@ -43,7 +47,7 @@ function gen_json_check () {
 				-a "$p1" = "install" \
 				-a "$p2" = "user" \
 				-a "$p3" = "installed" ]; then
-					json_add_string "$pkg" "$version";
+			json_add_string "$pkg" "$version";
 			fi
 		done < /usr/lib/opkg/status
 	fi
@@ -84,7 +88,7 @@ function server_request() {
 		else
 			echo -n "."
 		fi
-		sleep 1
+		sleep 3
 		server_request
 	elif [ $statuscode -eq 206 ]; then
 		if [ $IMAGEBUILDER -eq 1 ] && [ $BUILDING -eq 0 ]; then
@@ -97,7 +101,7 @@ function server_request() {
 		else
 			echo -n "."
 		fi
-		sleep 1
+		sleep 3
 		server_request
 	fi
 }
@@ -124,7 +128,7 @@ function upgrade_check_200() {
 }
 
 function check_checksum() {
-	md5_checksum="$(md5sum /tmp/sysupgrade.bin | awk '{ print $1 }')"
+	md5_checksum="$(md5sum /tmp/firmware.bin | awk '{ print $1 }')"
 	if [ "$md5_checksum" != "$sysupgrade_checksum" ]; then
 		echo "checksum: missmatch!"
 		exit 1
@@ -135,8 +139,8 @@ function check_checksum() {
 
 function check_signature() {
 	if [ $CHECK_SIGNATURE -eq 1 ]; then
-		uclient-fetch -O "/tmp/sysupgrade.bin.sig" "${sysupgrade_url/https/http}.sig"
-		usign -V -m /tmp/sysupgrade.bin -p /tmp/worker_pubkey -q
+		uclient-fetch -O "/tmp/firmware.bin.sig" "${sysupgrade_url/https/http}.sig"
+		usign -V -m /tmp/firmware.bin -p /tmp/worker_pubkey -q
 		if [ $? != 0 ]; then
 			echo "signature: missmatch!"
 			exit 1
@@ -167,7 +171,7 @@ function upgrade_request_200() {
 	json_get_var sysupgrade_url sysupgrade
 	json_get_var sysupgrade_checksum checksum
 	json_get_var sysupgrade_filesize filesize
-	uclient-fetch -O "/tmp/sysupgrade.bin" "${sysupgrade_url/https/http}"
+	uclient-fetch -O "/tmp/firmware.bin" "${sysupgrade_url/https/http}"
 	check_checksum;
 	check_signature;
 	check_memory;
@@ -175,16 +179,15 @@ function upgrade_request_200() {
 	echo "install sysupgrade? [y/N]"
 	read install_sysupgrade
 	if [ "$install_sysupgrade" == "y" ]; then
-		echo "installing sysupgrade"
-		response="$(ubus call attendedsysupgrade sysupgrade)"
-		# only printed if sysupgrade fails
-		json_init
-		json_load "$response"
-		json_get_var message message
-		echo "$message"
+		ubus call rpc-sys upgrade_start
+		echo "sysupgrade started - please wait for reboot"
+	else
+		echo "sysupgrade aborted"
 	fi
 }
 
+load_uci;
+load_device_info;
 gen_json_check;
 export REQUEST_PATH='api/upgrade-check';
 server_request;

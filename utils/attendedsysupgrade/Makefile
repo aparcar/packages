@@ -5,8 +5,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=attendedsysupgrade
-PKG_VERSION:=0.1
-PKG_RELEASE:=1
+PKG_VERSION:=0.2
+PKG_RELEASE:=2
 PKG_LICENSE:=GPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
@@ -16,7 +16,7 @@ define Package/attendedsysupgrade
   CATEGORY:=Base system
   TITLE:=Attended Sysupgrade via command line
   MAINTAINER:=Paul Spooren <paul@spooren.de>
-  DEPENDS:=+rpcd-mod-attendedsysupgrade
+  DEPENDS:=+attendedsysupgrade-common
 endef
 
 define Package/attendedsysupgrade/description
@@ -27,15 +27,9 @@ define Package/attendedsysupgrade/description
 
 	attendedsysupgrade
 
-	Example output:
-
-	Possible parameters:
-
-	keep_settings: bool # preserve /config/
-
 	UCI options:
 
-	attendedsysupgrade.upgradeserver.server_url
+	attendedsysupgrade.erver.url
 	URL of compatible upgrade server [1]
 
 	[1]: https://github.com/aparcar/gsoc17-attended-sysupgrade
