@@ -1,7 +1,5 @@
 #!/bin/sh
 # sends a request to the demo update server
-echo "untrusted comment: worker 33" > /tmp/worker_pubkey
-echo "RWRFTbSNRlxUI3TtRQkWEwxs384u9jv2zdPvP5ItA1XxA+JhCjIUkDbp" >> /tmp/worker_pubkey
 
 CHECK_SIGNATURE=0
 
@@ -19,12 +17,16 @@ function load_device_info() {
 }
 
 function load_uci() {
-	export UPDATESERVER="$(uci get attendedsysupgrade.server.url)"
+	if [ -e /etc/confi/attendedsysupgrade ]; then
+		export UPDATESERVER="$(uci get attendedsysupgrade.server.url)"
+	else
+		echo "config file missing"
+		exit 1
+	fi
 }
 
 function gen_json_board() {
 	json_add_string "distro" $distro
-	json_add_string "version" $release
 	json_add_string "target" $target
 	json_add_string "subtarget" $subtarget
 }
@@ -32,6 +34,7 @@ function gen_json_board() {
 function gen_json_check () {
 	json_init;
 	gen_json_board;
+	json_add_string "version" $release
 	json_add_object "packages";
 
 	if [ -f /usr/lib/opkg/status ]; then
@@ -56,11 +59,6 @@ function gen_json_check () {
 	export REQUEST_JSON="$(json_dump)"
 }
 
-function gen_json_request() {
-	json_init;
-	gen_json_board;
-}
-
 IMAGEBUILDER=0
 BUILDING=0
 function server_request() {
@@ -69,6 +67,8 @@ function server_request() {
 	if [ -z $statuscode ]; then
 		if [ $(expr "$(cat /tmp/uclient-statuscode)" : '.*full content requested') != 0 ]; then
 			export statuscode=206
+		elif [ $(expr "$(cat /tmp/uclient-statuscode)" : '.*prematurely') != 0 ]; then
+			export statuscode=204
 		else
 			export statuscode=200
 		fi
@@ -90,6 +90,9 @@ function server_request() {
 		fi
 		sleep 3
 		server_request
+	elif [ $statuscode -eq 204 ]; then
+		echo "system is up to date"
+		exit 0
 	elif [ $statuscode -eq 206 ]; then
 		if [ $IMAGEBUILDER -eq 1 ] && [ $BUILDING -eq 0 ]; then
 			echo ""
@@ -122,6 +125,10 @@ function upgrade_check_200() {
 			export BUILDING=0
 			export REQUEST_PATH='api/upgrade-request'
 			server_request;
+			json_init;
+			gen_json_board;
+			json_add_string "version" "$version"
+			json_add_string "packages" "$packages"
 			upgrade_request_200;
 		fi
 	fi
@@ -139,19 +146,24 @@ function check_checksum() {
 
 function check_signature() {
 	if [ $CHECK_SIGNATURE -eq 1 ]; then
-		uclient-fetch -O "/tmp/firmware.bin.sig" "${sysupgrade_url/https/http}.sig"
-		usign -V -m /tmp/firmware.bin -p /tmp/worker_pubkey -q
-		if [ $? != 0 ]; then
-			echo "signature: missmatch!"
-			exit 1
+		if [ -e /etc/build_pubkey ]; then
+			uclient-fetch -O "/tmp/firmware.bin.sig" "${sysupgrade_url/https/http}.sig"
+			usign -V -m /tmp/firmware.bin -p /tmp/worker_pubkey -q
+			if [ $? != 0 ]; then
+				echo "signature: missmatch!"
+				exit 1
+			else
+				echo "signature: valid"
+				echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+				echo "not really secure just yet due to http"
+				echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			fi
 		else
-			echo "signature: valid"
-			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-			echo "not really secure just yet due to http"
-			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			echo "signature: check skipped"
 		fi
 	else
-		echo "signature: check skipped"
+		echo "no public of server found"
+		exit 1
 	fi
 }
 
