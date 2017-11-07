@@ -17,7 +17,7 @@ function load_device_info() {
 }
 
 function load_uci() {
-	if [ -e /etc/confi/attendedsysupgrade ]; then
+	if [ -e /etc/config/attendedsysupgrade ]; then
 		export UPDATESERVER="$(uci get attendedsysupgrade.server.url)"
 	else
 		echo "config file missing"
