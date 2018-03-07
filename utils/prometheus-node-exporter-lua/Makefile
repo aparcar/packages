@@ -70,6 +70,12 @@ define Package/prometheus-node-exporter-lua-bmx7
   DEPENDS:=prometheus-node-exporter-lua bmx7 +lua-cjson +bmx7-json
 endef
 
+define Package/prometheus-node-exporter-lua-batadv
+  $(call Package/prometheus-node-exporter-lua/Default)
+  TITLE+= (batadv links collector)
+  DEPENDS:=prometheus-node-exporter-lua +lua-cjson batmand
+endef
+
 Build/Compile=
 
 define Package/prometheus-node-exporter-lua/install
@@ -119,6 +125,11 @@ define Package/prometheus-node-exporter-lua-bmx7/install
 	$(INSTALL_BIN) ./files/usr/lib/lua/prometheus-collectors/bmx7.lua $(1)/usr/lib/lua/prometheus-collectors/
 endef
 
+define Package/prometheus-node-exporter-lua-batadv/install
+	$(INSTALL_DIR) $(1)/usr/lib/lua/prometheus-collectors
+	$(INSTALL_BIN) ./files/usr/lib/lua/prometheus-collectors/batadv.lua $(1)/usr/lib/lua/prometheus-collectors/
+endef
+
 $(eval $(call BuildPackage,prometheus-node-exporter-lua))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-nat_traffic))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-netstat))
@@ -126,3 +137,4 @@ $(eval $(call BuildPackage,prometheus-node-exporter-lua-wifi))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-wifi_stations))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-bmx6))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-bmx7))
+$(eval $(call BuildPackage,prometheus-node-exporter-lua-batadv))
