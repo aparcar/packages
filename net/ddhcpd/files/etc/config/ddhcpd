@@ -1,0 +1,8 @@
+config ddhcpd 'settings'
+      option enabled '1'
+      option dhcp_interface 'br-lan'
+      option server_interface 'br-lan'
+      option block_size_pow '2'
+      option spare_blocks '1'
+      option timeout '30'
+      option block_network '10.116.220.0/22'
