@@ -1,0 +1,46 @@
+name: Build latest updated packages
+
+on: [push]
+
+jobs:
+  build:
+    name: Build packages for ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch:
+          - x86_64
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 100
+
+      - name: Determine changed packages
+        run: |
+          LAST_BUILD="$(curl \
+            https://downloads.openwrt.org/snapshots/packages/${{ matrix.arch }}/feeds.conf \
+            | grep " packages " | cut -d '^' -f 2)"
+
+          PACKAGES="$(git diff --diff-filter=d --name-only $LAST_BUILD \
+            | grep 'Makefile$' | grep -Ev '/files/|/src/' \
+            | awk -F/ '{ print $(NF-1) }' | tr '\n' ' ')"
+
+          echo "Building $PACKAGES"
+
+          echo "::set-env name=PACKAGES::$PACKAGES"
+
+      - name: Build
+        uses: aparcar/action-openwrt-sdk@make_single
+
+      - name: Upload kmods to S3
+        uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --acl public-read --follow-symlinks --delete
+        env:
+          AWS_S3_BUCKET: packages
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: https://images.aparcar.org
+          SOURCE_DIR: bin/packages/${{ matrix.arch}}/
+          DEST_DIR: ${{ matrix.arch}}/
