@@ -2,6 +2,9 @@ name: Test Build
 
 on:
   pull_request:
+    branches:
+      - master
+      - 'openwrt-*'
 
 jobs:
   build:
