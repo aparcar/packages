@@ -1,0 +1,30 @@
+diff --git a/src/genhelp.lua b/src/genhelp.lua
+index 06a3590..82b7df3 100644
+--- a/src/genhelp.lua
++++ b/src/genhelp.lua
+@@ -1,5 +1,3 @@
+-#!/usr/bin/lua5.3
+-
+ --[[
+ Utility to convert SCDOC manpages to apk-tools help messages
+ 
+diff --git a/src/meson.build b/src/meson.build
+index b744a1a..4a89a65 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -78,14 +78,12 @@ apk_src = [
+ ]
+ 
+ if lua_bin.found()
+-	genhelp_script = find_program('./genhelp.lua')
+-
+ 	generated_help = custom_target(
+ 		'help.h',
+ 		capture: true,
+ 		output: 'help.h',
+ 		input: man_files,
+-		command: [genhelp_script, '@INPUT@'],
++		command: [lua_bin, '../src/genhelp.lua', '@INPUT@'],
+ 	)
+ else
+ 	generated_help = custom_target(
